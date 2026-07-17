@@ -1,0 +1,528 @@
+from pathlib import Path
+import json
+
+OUTPUT = Path(__file__).with_name("riemann_zodiac_3d_canvas.html")
+
+ZODIAC = [
+  {
+    "name": "Овен",
+    "symbol": "♈"
+  },
+  {
+    "name": "Телец",
+    "symbol": "♉"
+  },
+  {
+    "name": "Близнецы",
+    "symbol": "♊"
+  },
+  {
+    "name": "Рак",
+    "symbol": "♋"
+  },
+  {
+    "name": "Лев",
+    "symbol": "♌"
+  },
+  {
+    "name": "Дева",
+    "symbol": "♍"
+  },
+  {
+    "name": "Весы",
+    "symbol": "♎"
+  },
+  {
+    "name": "Скорпион",
+    "symbol": "♏"
+  },
+  {
+    "name": "Стрелец",
+    "symbol": "♐"
+  },
+  {
+    "name": "Козерог",
+    "symbol": "♑"
+  },
+  {
+    "name": "Водолей",
+    "symbol": "♒"
+  },
+  {
+    "name": "Рыбы",
+    "symbol": "♓"
+  }
+]
+ZEROS = [
+  14.134725141735,
+  21.022039638772,
+  25.010857580146,
+  30.42487612586,
+  32.935061587739,
+  37.586178158826,
+  40.918719012147,
+  43.327073280915,
+  48.005150881167,
+  49.773832477672,
+  52.970321477714,
+  56.446247697064,
+  59.347044002602,
+  60.83177852461,
+  65.112544048082,
+  67.079810529494,
+  69.546401711174,
+  72.067157674482,
+  75.704690699084,
+  77.144840068875,
+  79.337375020249,
+  82.910380854086,
+  84.735492980517,
+  87.425274613125,
+  88.809111207634,
+  92.491899270558,
+  94.651344040519,
+  95.870634228245
+]
+PRIMES = [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61]
+
+HTML_TEMPLATE = r"""<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>3D Canvas: зодиак, π и нули Римана</title>
+<style>
+:root{
+  --bg:#090907;--panel:#15130f;--panel2:#100f0c;--line:#413829;
+  --text:#e7deca;--muted:#9b917f;--bronze:#b89a68;--gold:#d8b77d;
+  --red:#a52d23;--ivory:#efe4ce;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font-family:Segoe UI,Arial,sans-serif}
+header{max-width:1700px;margin:auto;padding:20px 22px 8px}
+h1{margin:0 0 8px;font:400 clamp(28px,3vw,46px)/1.1 Georgia,Times New Roman,serif}
+.subtitle{max-width:1350px;color:var(--muted);line-height:1.5}
+.layout{max-width:1700px;margin:auto;padding:12px 16px 24px;display:grid;grid-template-columns:325px 1fr;gap:16px}
+.sidebar,.stage,.article{background:var(--panel);border:1px solid var(--line);border-radius:2px}
+.sidebar{padding:15px;align-self:start;max-height:calc(100vh - 22px);overflow:auto;position:sticky;top:10px}
+.stage{position:relative;overflow:hidden;min-height:780px}
+canvas{display:block;width:100%;height:780px;background:
+radial-gradient(circle at 50% 42%,#29241b 0,#110f0c 58%,#070706 100%)}
+.toolbar{position:absolute;left:12px;bottom:12px;right:12px;display:flex;gap:8px;flex-wrap:wrap;pointer-events:none}
+.toolbar span{background:rgba(9,9,7,.84);border:1px solid var(--line);padding:7px 10px;border-radius:2px;color:var(--muted);font-size:12px}
+#tooltip{position:absolute;display:none;pointer-events:none;z-index:4;max-width:290px;
+background:rgba(9,9,7,.96);border:1px solid var(--bronze);border-radius:2px;padding:9px 11px;
+font-size:12px;line-height:1.45;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+.group{border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
+.group:first-child{border:0;padding:0;margin:0}
+.group h3{font:400 16px Georgia,Times New Roman,serif;margin:0 0 9px;color:var(--gold)}
+.row{display:flex;align-items:center;gap:9px;margin:8px 0;font-size:14px}
+.row input{accent-color:var(--red)}
+.small{display:block;color:var(--muted);font-size:12px;margin:9px 0 5px}
+.small b{float:right;color:var(--gold);font-weight:500}
+input[type=range]{width:100%}
+.buttons{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+button{background:#211d16;border:1px solid var(--line);color:var(--text);padding:9px;border-radius:2px;cursor:pointer}
+button:hover{border-color:var(--gold)}
+.formula{background:var(--panel2);border-left:2px solid var(--red);padding:9px 10px;border-radius:0;font-size:12px;color:#d7cdb9;line-height:1.5;margin:7px 0}
+.article{max-width:1700px;margin:0 auto 28px;padding:17px 21px}
+.article summary{cursor:pointer;font-weight:700;font-size:18px}
+.article h2{font:400 22px Georgia,Times New Roman,serif;margin-top:22px}.article p,.article li{color:#cfc4b0;line-height:1.58}
+.warning{color:var(--gold)}
+@media(max-width:1000px){
+  .layout{grid-template-columns:1fr}
+  .sidebar{position:relative;max-height:none}
+  .stage,canvas{min-height:660px;height:660px}
+}
+</style>
+</head>
+<body>
+<header>
+<h1>3D-модель без WebGL: зодиак, π и гипотеза Римана</h1>
+<div class="subtitle">
+Эта версия использует обычный HTML Canvas и собственный перспективный проектор.
+Она должна работать даже там, где WebGL или Plotly не запускаются. Вращайте сцену мышью,
+масштабируйте колёсиком и включайте слои слева.
+</div>
+</header>
+
+<div class="layout">
+<aside class="sidebar">
+  <div class="group">
+    <h3>Слои сцены</h3>
+    <label class="row"><input type="checkbox" data-layer="zodiac" checked> Зодиакальная спираль</label>
+    <label class="row"><input type="checkbox" data-layer="matrix"> Кирпичная матрица 8×12</label>
+    <label class="row"><input type="checkbox" data-layer="pi" checked> Остаток π и рычаг</label>
+    <label class="row"><input type="checkbox" data-layer="zeros" checked> Нули и четверка 0→4</label>
+    <label class="row"><input type="checkbox" data-layer="circle" checked> Критическая окружность</label>
+    <label class="row"><input type="checkbox" data-layer="fourier"> Цикл Фурье F⁴=I</label>
+    <label class="row"><input type="checkbox" data-layer="gaussian"> Гауссиана e<sup>−πr²</sup></label>
+    <label class="row"><input type="checkbox" data-layer="logradius"> Логарифмический радиус</label>
+    <label class="row"><input type="checkbox" data-layer="primes"> Простые как векторы</label>
+  </div>
+
+  <div class="group">
+    <h3>Параметры</h3>
+    <label class="small">Витки <b id="turnsV">8</b></label>
+    <input id="turns" type="range" min="7" max="8" step="1" value="8">
+
+    <label class="small">β вне критической линии <b id="betaV">0.64</b></label>
+    <input id="beta" type="range" min="0.50" max="0.82" step="0.01" value="0.64">
+
+    <label class="small">Выбранный нуль <b id="zeroV"></b></label>
+    <input id="zeroIndex" type="range" min="0" max="27" step="1" value="0">
+
+    <label class="small">Вращение простых t <b id="timeV">7.0</b></label>
+    <input id="time" type="range" min="0" max="30" step="0.1" value="7">
+
+    <label class="small">Сдвиг матрицы <b id="shiftV">+1</b></label>
+    <input id="shift" type="range" min="-6" max="6" step="1" value="1">
+  </div>
+
+  <div class="group">
+    <h3>Камера</h3>
+    <div class="buttons">
+      <button data-camera="all">Общий вид</button>
+      <button data-camera="zodiac">Зодиак</button>
+      <button data-camera="zeros">Нули</button>
+      <button data-camera="operator">Оператор</button>
+    </div>
+  </div>
+
+  <div class="group">
+    <h3>Формулы</h3>
+    <div class="formula">ε = π−3 = <span id="eps"></span><br>1/ε = <span id="ratio"></span><br>2/ε = <span id="ratio2"></span></div>
+    <div class="formula">Орбита: ρ, ρ̄, 1−ρ, 1−ρ̄</div>
+    <div class="formula">D = −i(r d/dr + 1/2)<br>u = log r</div>
+    <div class="formula">w = 1−1/ρ<br>RH ⇔ |w|=1</div>
+  </div>
+</aside>
+
+<section class="stage">
+  <canvas id="canvas"></canvas>
+  <div id="tooltip"></div>
+  <div class="toolbar">
+    <span>ЛКМ + движение: вращение</span>
+    <span>Колесо: масштаб</span>
+    <span>Наведение: данные точки</span>
+    <span>Двойной клик: сброс камеры</span>
+  </div>
+</section>
+</div>
+
+<details class="article" open>
+<summary>Подключённая статья и логика слоёв</summary>
+<h2>Ноль превращается в четыре</h2>
+<p>Для <code>ρ=β+iγ</code> симметрии дзета-функции дают
+<code>ρ, ρ̄, 1−ρ, 1−ρ̄</code>. При <code>β=1/2</code> четыре точки схлопываются в пару.</p>
+
+<h2>Четыре состояния Фурье</h2>
+<p><code>F²f(x)=f(−x)</code>, поэтому <code>F⁴=I</code>. Гауссиана
+<code>e^(−πx²)</code> сохраняется преобразованием Фурье и ведёт через
+тета-функцию и преобразование Меллина к симметрии <code>ξ(s)=ξ(1−s)</code>.</p>
+
+<h2>Радиус и логарифм</h2>
+<p>После замены <code>u=log r</code> масштабирование радиуса становится переносом.
+Функции <code>r^(−1/2+it)</code> являются обобщёнными собственными функциями
+генератора масштабирования.</p>
+
+<h2>Простые как вращающиеся фазы</h2>
+<p>Члены с простыми можно визуализировать как векторы с радиусом
+<code>(log p)/√p</code> и фазой <code>−t log p</code>. На критической линии
+это является эвристической картиной после аналитического продолжения.</p>
+
+<h2>Остаток π−3</h2>
+<p>Он имеет корректный смысл длины остаточной дуги:
+<code>πr=3r+(π−3)r</code>. Но в функциональном уравнении фундаментален полный π.
+Совпадение <code>2/(π−3)</code> с первым нулём близкое, но не продолжается.</p>
+
+<p class="warning"><b>Разделение уровней:</b> симметрии нулей, цикл Фурье,
+гауссиана, логарифмический радиус и критическая окружность математически определены.
+Зодиак, кирпичная кладка и название «Змееносец» для остаточного сектора являются
+авторской системой визуального соответствия.</p>
+</details>
+
+<script>
+const ZODIAC = __ZODIAC__;
+const ZEROS = __ZEROS__;
+const PRIMES = __PRIMES__;
+const EPS = Math.PI - 3;
+const COLORS = ["#d8b77d","#a52d23","#c8bda8","#806b4c","#efe4ce","#60423a",
+"#b89a68","#7d6a55","#decba8","#9b917f","#c0a36f","#cabda3"];
+
+const canvas=document.getElementById("canvas"),ctx=canvas.getContext("2d");
+const tooltip=document.getElementById("tooltip");
+let DPR=Math.min(devicePixelRatio||1,2);
+let camera={yaw:-0.58,pitch:0.42,distance:58,center:{x:0,y:0,z:5},focal:820};
+let dragging=false,lastX=0,lastY=0,mouse={x:-999,y:-999};
+let scene=[],projectedPoints=[];
+
+function state(){
+  const layers={};
+  document.querySelectorAll("[data-layer]").forEach(e=>layers[e.dataset.layer]=e.checked);
+  const zi=+document.getElementById("zeroIndex").value;
+  return {
+    layers,
+    turns:+document.getElementById("turns").value,
+    beta:+document.getElementById("beta").value,
+    zeroIndex:zi,
+    gamma:ZEROS[zi],
+    time:+document.getElementById("time").value,
+    shift:+document.getElementById("shift").value
+  };
+}
+function labels(s){
+  document.getElementById("turnsV").textContent=s.turns;
+  document.getElementById("betaV").textContent=s.beta.toFixed(2);
+  document.getElementById("zeroV").textContent=`γ${s.zeroIndex+1}=${s.gamma.toFixed(6)}`;
+  document.getElementById("timeV").textContent=s.time.toFixed(1);
+  document.getElementById("shiftV").textContent=(s.shift>=0?"+":"")+s.shift;
+  document.getElementById("eps").textContent=EPS.toFixed(12);
+  document.getElementById("ratio").textContent=(1/EPS).toFixed(9);
+  document.getElementById("ratio2").textContent=(2/EPS).toFixed(9);
+}
+function resize(){
+  const r=canvas.getBoundingClientRect();
+  canvas.width=Math.max(1,Math.round(r.width*DPR));
+  canvas.height=Math.max(1,Math.round(r.height*DPR));
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+}
+function point(x,y,z,color="#efe4ce",size=4,label="",info="",layer=""){scene.push({kind:"point",x,y,z,color,size,label,info,layer})}
+function line(a,b,color="#efe4ce",width=1,layer="",alpha=1){scene.push({kind:"line",a,b,color,width,layer,alpha})}
+function poly(points,color="#efe4ce",width=1,layer="",alpha=1){
+  for(let i=1;i<points.length;i++)line(points[i-1],points[i],color,width,layer,alpha)
+}
+function project(p){
+  let x=p.x-camera.center.x,y=p.y-camera.center.y,z=p.z-camera.center.z;
+  const cy=Math.cos(camera.yaw),sy=Math.sin(camera.yaw);
+  const cp=Math.cos(camera.pitch),sp=Math.sin(camera.pitch);
+  const x1=cy*x+sy*z, z1=-sy*x+cy*z;
+  const y1=cp*y-sp*z1, z2=sp*y+cp*z1;
+  const denom=Math.max(2,camera.distance-z2);
+  const k=camera.focal/denom;
+  return {x:canvas.clientWidth/2+x1*k,y:canvas.clientHeight/2-y1*k,depth:z2,k};
+}
+function build(s){
+  scene=[];
+  if(s.layers.zodiac)buildZodiac(s);
+  if(s.layers.matrix)buildMatrix(s);
+  if(s.layers.pi)buildPi(s);
+  if(s.layers.zeros)buildZeros(s);
+  if(s.layers.circle)buildCircle(s);
+  if(s.layers.fourier)buildFourier();
+  if(s.layers.gaussian)buildGaussian();
+  if(s.layers.logradius)buildLogRadius(s);
+  if(s.layers.primes)buildPrimes(s);
+}
+function buildZodiac(s){
+  const off={x:-16,y:0,z:-3},r0=1.0,pitch=.27;
+  const pts=[];
+  for(let j=0;j<=1500;j++){
+    const a=2*Math.PI*s.turns*j/1500,r=r0+pitch*a;
+    pts.push({x:off.x+r*Math.cos(a),y:off.y+r*Math.sin(a),z:off.z+.31*a});
+  }
+  poly(pts,"#4a4031",1.8,"zodiac",.75);
+  for(let k=0;k<s.turns;k++){
+    for(let i=0;i<12;i++){
+      const a=2*Math.PI*k+2*Math.PI*i/12,r=r0+pitch*a;
+      point(off.x+r*Math.cos(a),off.y+r*Math.sin(a),off.z+.31*a,COLORS[i],5.2,
+        `${ZODIAC[i].symbol}${k*12+i+1}`,
+        `Виток ${k+1}<br>${i+1}. ${ZODIAC[i].name}<br>Точка #${k*12+i+1}`,"zodiac");
+    }
+    const a=2*Math.PI*k+3+EPS/2,r=r0+pitch*a;
+    point(off.x+r*Math.cos(a),off.y+r*Math.sin(a),off.z+.31*a,"#a52d23",7,"⛎",
+      `Остаточный сектор<br>ε=π−3=${EPS.toFixed(12)}<br>1/ε=${(1/EPS).toFixed(8)}`,"zodiac");
+  }
+}
+function buildMatrix(s){
+  const off={x:-15,y:-13,z:-9};
+  for(let k=0;k<s.turns;k++){
+    const sh=k%2?.5:0;
+    for(let i=0;i<12;i++){
+      const target=((i+k*s.shift)%12+12)%12;
+      const p={x:off.x+i+sh,y:off.y+k,z:off.z+.18*Math.log(2+k*12+i)};
+      point(p.x,p.y,p.z,COLORS[target],5.5,`${ZODIAC[i].symbol}`,
+        `Слой ${k+1}<br>${ZODIAC[i].name} → ${ZODIAC[target].name}<br>#${k*12+i+1}`,"matrix");
+      if(k>0){
+        const sh0=(k-1)%2?.5:0;
+        line({x:off.x+i+sh0,y:off.y+k-1,z:off.z+.18*Math.log(2+(k-1)*12+i)},p,COLORS[i],1,"matrix",.45);
+      }
+    }
+  }
+}
+function buildPi(){
+  const off={x:-17,y:0,z:-5},r=4.2;
+  const main=[],rem=[],full=[];
+  for(let i=0;i<=220;i++){const a=Math.PI*i/220;full.push({x:off.x+r*Math.cos(a),y:off.y+r*Math.sin(a),z:off.z})}
+  for(let i=0;i<=180;i++){const a=3*i/180;main.push({x:off.x+r*Math.cos(a),y:off.y+r*Math.sin(a),z:off.z+.03})}
+  for(let i=0;i<=45;i++){const a=3+(Math.PI-3)*i/45;rem.push({x:off.x+r*Math.cos(a),y:off.y+r*Math.sin(a),z:off.z+.07})}
+  poly(full,"#5a4d3b",1.5,"pi",.8);poly(main,"#d8b77d",4,"pi",1);poly(rem,"#a52d23",7,"pi",1);
+  line({x:off.x-r,y:off.y-5,z:off.z},{x:off.x,y:off.y-5,z:off.z},"#b89a68",5,"pi");
+  line({x:off.x,y:off.y-5,z:off.z},{x:off.x+EPS*r,y:off.y-5,z:off.z},"#a52d23",5,"pi");
+  point(off.x,off.y-5,off.z,"#efe4ce",6,"●","Точка опоры<br>r/(εr)=1/ε","pi");
+}
+function buildZeros(s){
+  const scale=.22;
+  line({x:0,y:0,z:-1},{x:0,y:0,z:ZEROS[ZEROS.length-1]*scale+2},"#e7deca",2.5,"zeros",.9);
+  ZEROS.forEach((g,i)=>point(0,0,g*scale,"#d8b77d",4.5,`ρ${i+1}`,`Нуль #${i+1}<br>β=1/2<br>γ=${g.toFixed(12)}`,"zeros"));
+  const dx=(s.beta-.5)*13,g=s.gamma*scale;
+  const ps=[
+    {x:dx,y:0,z:g,l:"ρ"},{x:dx,y:0,z:-g,l:"ρ̄"},
+    {x:-dx,y:0,z:g,l:"1−ρ̄"},{x:-dx,y:0,z:-g,l:"1−ρ"}
+  ];
+  ps.forEach((p,i)=>point(p.x,p.y,p.z,i<2?"#a52d23":"#b89a68",7,p.l,
+    `Четырёхточечная орбита<br>β=${s.beta.toFixed(2)}<br>γ=${s.gamma.toFixed(9)}`,"zeros"));
+  line(ps[0],ps[2],"#60423a",1.5,"zeros",.7);line(ps[1],ps[3],"#60423a",1.5,"zeros",.7);
+}
+function buildCircle(s){
+  const off={x:0,y:-10,z:0},R=4.2,pts=[];
+  for(let i=0;i<=300;i++){const a=2*Math.PI*i/300;pts.push({x:off.x+R*Math.cos(a),y:off.y+R*Math.sin(a),z:off.z})}
+  poly(pts,"#a52d23",3.5,"circle",.95);
+  ZEROS.forEach((g,i)=>{
+    const b=.5,d=b*b+g*g,wr=1-b/d,wi=g/d;
+    point(off.x+R*wr,off.y+R*wi,off.z+.025*i,"#d8b77d",4,"",`Образ нуля #${i+1}<br>|1−1/ρ|=1`,"circle");
+  });
+  const b=s.beta,g=s.gamma,d=b*b+g*g,wr=1-b/d,wi=g/d,mod=Math.hypot(wr,wi);
+  point(off.x+R*wr,off.y+R*wi,off.z+1,"#a52d23",7,"×",`Гипотетический дефект<br>|w|=${mod.toFixed(9)}`,"circle");
+}
+function buildFourier(){
+  const off={x:13,y:-9,z:-6},R=3.4,ps=[];
+  for(let k=0;k<4;k++){const a=Math.PI*k/2;ps.push({x:off.x+R*Math.cos(a),y:off.y+R*Math.sin(a),z:off.z+.8*k})}
+  ps.push(ps[0]);poly(ps,"#d8b77d",4,"fourier",1);
+  ["F⁰","F¹","F²","F³"].forEach((t,i)=>point(ps[i].x,ps[i].y,ps[i].z,COLORS[i*3],7,t,`${t}<br>После четырёх шагов F⁴=I`,"fourier"));
+}
+function buildGaussian(){
+  const off={x:13,y:5,z:-7};
+  for(let yi=-10;yi<=10;yi++){
+    const row=[];
+    for(let xi=-18;xi<=18;xi++){
+      const x=xi/8,y=yi/5,z=4*Math.exp(-Math.PI*(x*x+y*y));
+      row.push({x:off.x+x,y:off.y+y,z:off.z+z});
+    }
+    poly(row,"#806b4c",1,"gaussian",.45);
+  }
+  for(let xi=-18;xi<=18;xi+=2){
+    const col=[];
+    for(let yi=-10;yi<=10;yi++){
+      const x=xi/8,y=yi/5,z=4*Math.exp(-Math.PI*(x*x+y*y));
+      col.push({x:off.x+x,y:off.y+y,z:off.z+z});
+    }
+    poly(col,"#4d4437",.8,"gaussian",.3);
+  }
+  point(off.x,off.y,off.z+4,"#a52d23",6,"π","Гауссиана e^(−πr²)<br>Фурье-инвариантный слой","gaussian");
+}
+function buildLogRadius(s){
+  const off={x:13,y:0,z:2},pts=[];
+  for(let i=0;i<=900;i++){
+    const u=-1.2+2.5*i/900,a=Math.exp(-u/2)*1.25,phase=s.gamma*.25*u;
+    pts.push({x:off.x+4*u,y:off.y+a*Math.cos(phase),z:off.z+a*Math.sin(phase)});
+  }
+  poly(pts,"#d8b77d",3.4,"logradius",1);
+  line({x:off.x-5,y:off.y,z:off.z},{x:off.x+6,y:off.y,z:off.z},"#e7deca",1.5,"logradius",.8);
+  point(off.x+5.5,off.y,off.z,"#efe4ce",4,"u","u=log r<br>r^(−1/2+it)","logradius");
+}
+function buildPrimes(s){
+  const off={x:14,y:10,z:2};
+  PRIMES.forEach((p,i)=>{
+    const R=Math.log(p)/Math.sqrt(p)*3.2,ph=-s.time*Math.log(p),z=off.z+.34*i;
+    const tip={x:off.x+R*Math.cos(ph),y:off.y+R*Math.sin(ph),z};
+    line({x:off.x,y:off.y,z},tip,COLORS[i%12],2.5,"primes",.9);
+    point(tip.x,tip.y,tip.z,COLORS[i%12],4,String(p),`Простое p=${p}<br>R=(log p)/√p=${(Math.log(p)/Math.sqrt(p)).toFixed(7)}<br>φ=−t log p=${ph.toFixed(6)}`,"primes");
+  });
+}
+function draw(){
+  resize();
+  const s=state();labels(s);build(s);
+  ctx.clearRect(0,0,canvas.clientWidth,canvas.clientHeight);
+  drawAxes();
+  const projected=scene.map((o,idx)=>{
+    if(o.kind==="point")return {...o,p:project(o),idx};
+    return {...o,pa:project(o.a),pb:project(o.b),depth:(project(o.a).depth+project(o.b).depth)/2,idx};
+  }).sort((a,b)=>(a.kind==="point"?a.p.depth:a.depth)-(b.kind==="point"?b.p.depth:b.depth));
+  projectedPoints=[];
+  for(const o of projected){
+    if(o.kind==="line"){
+      const alpha=o.alpha??1;
+      ctx.globalAlpha=alpha;ctx.strokeStyle=o.color;ctx.lineWidth=o.width;
+      ctx.beginPath();ctx.moveTo(o.pa.x,o.pa.y);ctx.lineTo(o.pb.x,o.pb.y);ctx.stroke();
+    }else{
+      const r=Math.max(2,o.size*Math.min(1.8,Math.max(.55,o.p.k/18)));
+      ctx.globalAlpha=1;ctx.fillStyle=o.color;ctx.beginPath();ctx.arc(o.p.x,o.p.y,r,0,Math.PI*2);ctx.fill();
+      ctx.strokeStyle="rgba(216,183,125,.35)";ctx.lineWidth=.7;ctx.stroke();
+      if(o.label && r>2.6){
+        ctx.font=`${Math.max(10,Math.min(15,10+o.p.k/30))}px Segoe UI,Arial`;
+        ctx.fillStyle="#e7deca";ctx.textAlign="center";ctx.fillText(o.label,o.p.x,o.p.y-r-3);
+      }
+      projectedPoints.push({x:o.p.x,y:o.p.y,r:Math.max(8,r+5),info:o.info});
+    }
+  }
+  ctx.globalAlpha=1;
+  hover();
+}
+function drawAxes(){
+  const L=6,origin={x:0,y:0,z:0};
+  const axes=[
+    [{x:-L,y:0,z:0},{x:L,y:0,z:0},"rgba(165,45,35,.32)"],
+    [{x:0,y:-L,z:0},{x:0,y:L,z:0},"rgba(184,154,104,.28)"],
+    [{x:0,y:0,z:-L},{x:0,y:0,z:L},"rgba(231,222,202,.22)"]
+  ];
+  axes.forEach(([a,b,c])=>{const pa=project(a),pb=project(b);ctx.strokeStyle=c;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke()});
+}
+function hover(){
+  let best=null,dist=1e9;
+  for(const p of projectedPoints){
+    const d=Math.hypot(mouse.x-p.x,mouse.y-p.y);
+    if(d<p.r && d<dist){dist=d;best=p}
+  }
+  if(best && best.info){
+    tooltip.style.display="block";
+    tooltip.innerHTML=best.info;
+    const rect=canvas.getBoundingClientRect();
+    let x=mouse.x+18,y=mouse.y+18;
+    if(x+300>rect.width)x=mouse.x-300;
+    if(y+150>rect.height)y=mouse.y-150;
+    tooltip.style.left=x+"px";tooltip.style.top=y+"px";
+  }else tooltip.style.display="none";
+}
+function preset(name){
+  const presets={
+    all:{yaw:-.58,pitch:.42,distance:58,center:{x:0,y:0,z:4}},
+    zodiac:{yaw:-.68,pitch:.35,distance:35,center:{x:-14,y:0,z:5}},
+    zeros:{yaw:-.25,pitch:.28,distance:30,center:{x:0,y:-3,z:6}},
+    operator:{yaw:-.55,pitch:.35,distance:35,center:{x:12,y:4,z:1}}
+  };
+  Object.assign(camera,presets[name]);draw();
+}
+canvas.addEventListener("pointerdown",e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;canvas.setPointerCapture(e.pointerId)});
+canvas.addEventListener("pointermove",e=>{
+  const r=canvas.getBoundingClientRect();mouse.x=e.clientX-r.left;mouse.y=e.clientY-r.top;
+  if(dragging){
+    camera.yaw+=(e.clientX-lastX)*.008;
+    camera.pitch=Math.max(-1.35,Math.min(1.35,camera.pitch+(e.clientY-lastY)*.008));
+    lastX=e.clientX;lastY=e.clientY;
+  }
+  draw();
+});
+canvas.addEventListener("pointerup",()=>dragging=false);
+canvas.addEventListener("pointerleave",()=>{dragging=false;mouse.x=-999;mouse.y=-999;draw()});
+canvas.addEventListener("wheel",e=>{e.preventDefault();camera.distance=Math.max(18,Math.min(110,camera.distance+e.deltaY*.04));draw()},{passive:false});
+canvas.addEventListener("dblclick",()=>preset("all"));
+document.querySelectorAll("input").forEach(e=>e.addEventListener("input",draw));
+document.querySelectorAll("[data-camera]").forEach(e=>e.addEventListener("click",()=>preset(e.dataset.camera)));
+window.addEventListener("resize",draw);
+document.getElementById("zeroV").textContent=`γ1=${ZEROS[0].toFixed(6)}`;
+preset("all");
+</script>
+</body>
+</html>
+"""
+
+def main():
+    html = HTML_TEMPLATE.replace("__ZODIAC__", json.dumps(ZODIAC, ensure_ascii=False))
+    html = html.replace("__ZEROS__", json.dumps(ZEROS))
+    html = html.replace("__PRIMES__", json.dumps(PRIMES))
+    OUTPUT.write_text(html, encoding="utf-8")
+    print("Создан:", OUTPUT.resolve())
+
+if __name__ == "__main__":
+    main()
